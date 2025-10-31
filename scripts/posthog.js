@@ -2,7 +2,6 @@
 window.addEventListener('load', () => {
   setTimeout(() => {
     const script = document.createElement('script');
-    script.src = 'https://us-assets.i.posthog.com/static/array.js';
     script.defer = true;
     script.crossOrigin = 'anonymous';
     script.onload = () => {
@@ -15,6 +14,7 @@ window.addEventListener('load', () => {
         window.posthog.capture('pagina_cargada');
       }
     };
+    script.src = 'https://us-assets.i.posthog.com/static/array.js';
     document.head.appendChild(script);
   }, 4000);
 });
