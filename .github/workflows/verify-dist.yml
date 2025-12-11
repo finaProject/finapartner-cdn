@@ -1,0 +1,54 @@
+name: Publish dist to public repo (Deploy Key)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build dist
+        run: npm run minify:all
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Trust github.com host key
+        run: ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+
+      - name: Publish dist via SSH
+        run: |
+          set -e
+          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git pub
+          rsync -a --delete dist/ pub/
+          cd pub
+          git -c user.name="github-actions" -c user.email="actions@github.com" add -A
+          git commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
+          git push origin main
+
+      - name: Tag public repo with version
+        run: |
+          set -e
+          VERSION="v$(node -p "require('./package.json').version")"
+          cd pub
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            VERSION="${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          fi
+          git -c user.name="github-actions" -c user.email="actions@github.com" tag -a "$VERSION" -m "Release $VERSION from $GITHUB_REPOSITORY@$GITHUB_SHA"
+          git push origin "$VERSION"
