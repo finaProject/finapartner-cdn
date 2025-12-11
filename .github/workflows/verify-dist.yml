@@ -50,7 +50,7 @@ jobs:
           rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
           git add -A
           git -c user.name="github-actions" -c user.email="actions@github.com" commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
-          git push -u origin main
+          git push -u git@github.com:finaProject/finapartner-cdn-dist.git main
 
       - name: Tag public repo with version
         run: |
@@ -61,4 +61,4 @@ jobs:
             VERSION="${VERSION}-build.${GITHUB_RUN_NUMBER}"
           fi
           git -c user.name="github-actions" -c user.email="actions@github.com" tag -a "$VERSION" -m "Release $VERSION from $GITHUB_REPOSITORY@$GITHUB_SHA"
-          git push origin "$VERSION"
+          git push git@github.com:finaProject/finapartner-cdn-dist.git "$VERSION"
