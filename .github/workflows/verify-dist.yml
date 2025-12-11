@@ -30,17 +30,24 @@ jobs:
           ssh-private-key: ${{ secrets.DEPLOY_KEY }}
 
       - name: Trust github.com host key
-        run: ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+        run: ssh-keyscan -t rsa,ecdsa,ed25519 github.com >> ~/.ssh/known_hosts
 
       - name: Publish dist via SSH
         run: |
           set -e
-          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git
-          rsync -a --delete dist/ pub/
+          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git pub
           cd pub
+          # Si el repo está vacío, crea la rama main huérfana
+          if ! git rev-parse --quiet --verify HEAD >/dev/null; then
+            git checkout --orphan main
+          else
+            git checkout main || git checkout -b main
+          fi
+          # Sincroniza contenidos de dist/ al repo público
+          rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
           git -c user.name="github-actions" -c user.email="actions@github.com" add -A
           git commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
-          git push origin main
+          git push -u origin main
 
       - name: Tag public repo with version
         run: |
