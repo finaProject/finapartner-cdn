@@ -21,6 +21,7 @@
   "homepage": "https://github.com/finaProject/finapartner-cdn#readme",
   "devDependencies": {
     "husky": "^9.0.0",
+    "jsdom": "^20.0.3",
     "terser": "^5.36.0"
   }
 }
