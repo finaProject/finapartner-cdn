@@ -8,6 +8,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    env:
+      TARGET_REPO: finaProject/finapartner-cdn-dist
+      TARGET_BRANCH: main
+      CLONE_DIR: finapartner-cdn-dist
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,13 +39,16 @@ jobs:
       - name: Publish dist via SSH
         run: |
           set -e
-          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git pub
-          cd pub
+          TARGET_SSH="git@github.com:${TARGET_REPO}.git"
+          # Limpia el directorio si quedó de una ejecución previa
+          rm -rf "${CLONE_DIR}"
+          git clone --depth 1 "${TARGET_SSH}" "${CLONE_DIR}"
+          cd "${CLONE_DIR}"
           # Si el repo está vacío, crea la rama main huérfana
           if ! git rev-parse --quiet --verify HEAD >/dev/null; then
-            git checkout --orphan main
+            git checkout --orphan "${TARGET_BRANCH}"
           else
-            git checkout main || git checkout -b main
+            git checkout "${TARGET_BRANCH}" || git checkout -b "${TARGET_BRANCH}"
           fi
           # Configura identidad local para commits del bot
           git config user.name "github-actions"
@@ -50,15 +57,16 @@ jobs:
           rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
           git add -A
           git -c user.name="github-actions" -c user.email="actions@github.com" commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
-          git push -u git@github.com:finaProject/finapartner-cdn-dist.git main
+          git push -u "${TARGET_SSH}" "${TARGET_BRANCH}"
 
       - name: Tag public repo with version
         run: |
           set -e
           VERSION="v$(node -p "require('./package.json').version")"
-          cd pub
+          cd "${CLONE_DIR}"
           if git rev-parse "$VERSION" >/dev/null 2>&1; then
             VERSION="${VERSION}-build.${GITHUB_RUN_NUMBER}"
           fi
           git -c user.name="github-actions" -c user.email="actions@github.com" tag -a "$VERSION" -m "Release $VERSION from $GITHUB_REPOSITORY@$GITHUB_SHA"
-          git push git@github.com:finaProject/finapartner-cdn-dist.git "$VERSION"
+          TARGET_SSH="git@github.com:${TARGET_REPO}.git"
+          git push "${TARGET_SSH}" "$VERSION"
