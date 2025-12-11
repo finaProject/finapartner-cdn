@@ -49,7 +49,7 @@ jobs:
           # Sincroniza contenidos de dist/ al repo público
           rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
           git add -A
-          git commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
+          git -c user.name="github-actions" -c user.email="actions@github.com" commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
           git push -u origin main
 
       - name: Tag public repo with version
