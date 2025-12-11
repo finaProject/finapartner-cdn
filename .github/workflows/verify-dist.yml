@@ -2,7 +2,7 @@ name: Publish dist to public repo (Deploy Key)
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
       - name: Publish dist via SSH
         run: |
           set -e
-          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git pub
+          git clone --depth 1 git@github.com:finaProject/finapartner-cdn-dist.git
           rsync -a --delete dist/ pub/
           cd pub
           git -c user.name="github-actions" -c user.email="actions@github.com" add -A
