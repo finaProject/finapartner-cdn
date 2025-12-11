@@ -43,9 +43,12 @@ jobs:
           else
             git checkout main || git checkout -b main
           fi
+          # Configura identidad local para commits del bot
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
           # Sincroniza contenidos de dist/ al repo público
           rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
-          git -c user.name="github-actions" -c user.email="actions@github.com" add -A
+          git add -A
           git commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
           git push -u origin main
 
