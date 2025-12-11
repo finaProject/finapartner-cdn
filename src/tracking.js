@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let currentParams = new URLSearchParams(window.location.search);
   if (googleSearchRegex.test(referrer)) {
     // agrega si no existe, o actualiza si ya existe.
-    currentParams.set('utm_source', 'google');
+    currentParams.set('utm_source', 'seo');
     currentParams.set('utm_medium', 'seo');
   }
   const targetLinks = document.querySelectorAll('a[href*="registro.finapartner.com"]');
