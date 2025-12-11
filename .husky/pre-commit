@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 
 # Hook de Husky: minifica JS cambiados en src/ y scripts/
-# - Procesa archivos con lectura null-terminated (-z) para soportar espacios/caracteres especiales
-# - Convierte rutas a nombres sin extensión y ejecuta npm por archivo (citado de forma segura)
+# - Maneja nombres con espacios/caracteres especiales usando -z y xargs -0 (compatible POSIX sh)
+# - Convierte rutas a nombres sin extensión y ejecuta npm por archivo
 # - Agrega dist/ al commit
 
 # Source husky shim if available (created by `husky install`)
@@ -11,26 +11,25 @@
 
 set -eu
 
-# Recorre archivos staged null-terminated, filtra por src/ y scripts/, y evita *.min.js
-git diff --cached --name-only -z --diff-filter=ACMRTUXB \
-| while IFS= read -r -d '' f; do
-  case "$f" in
-    src/*.js)
-      case "$f" in *.min.js) continue;; esac
-      name=${f##*/}; name=${name%.js}
-      npm run -s minify -- --dir src "$name"
-      ;;
-    scripts/*.js)
-      case "$f" in *.min.js) continue;; esac
-      name=${f##*/}; name=${name%.js}
-      npm run -s minify -- --dir scripts "$name"
-      ;;
-  esac
-done
-
-# Nota: si no hubo archivos coincidentes, el bucle no ejecuta nada.
-# Dejamos un mensaje informativo, pero no tratamos como error.
-if [ -z "$(git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '^(src|scripts)/.*\.js$' | grep -v '\.min\.js$' || true)" ]; then
+# Si hay archivos JS staged en src/ o scripts/ (excluye *.min.js), procesa uno por uno
+if git diff --cached --name-only --diff-filter=ACMRTUXB | grep -E '^(src|scripts)/.*\.js$' | grep -v '\.min\.js$' >/dev/null 2>&1; then
+  git diff --cached --name-only -z --diff-filter=ACMRTUXB \
+  | xargs -0 -I {} sh -c '
+      f="$1"
+      case "$f" in
+        src/*.js)
+          case "$f" in *.min.js) exit 0;; esac
+          name=${f##*/}; name=${name%.js}
+          npm run -s minify -- --dir src "$name"
+          ;;
+        scripts/*.js)
+          case "$f" in *.min.js) exit 0;; esac
+          name=${f##*/}; name=${name%.js}
+          npm run -s minify -- --dir scripts "$name"
+          ;;
+      esac
+    ' sh {}
+else
   echo "Husky: no JS sources changed under src/ or scripts/, skipping minify."
 fi
 
