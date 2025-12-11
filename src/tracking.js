@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error("Error procesando URL:", link.href, e);
     }
   });
-
+});
 
   // if (queryParams && queryParams.includes("utm_")) {
   //   document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
