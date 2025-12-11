@@ -4,16 +4,46 @@ document.addEventListener('DOMContentLoaded', function () {
   let initiateCheckoutSent = false;
   let watchVideoSent = false;
   let viewContentSent = false;
-
-  const queryParams = window.location.search;
-  if (queryParams && queryParams.includes("utm_")) {
-    document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
-      const href = link.getAttribute('href') || '';
-      const baseUrl = href.split('?')[0];
-      link.setAttribute('href', `${baseUrl}${queryParams}`);
-    });
+  const referrer = document.referrer;
+  // RegEx para detectar Google
+  const googleSearchRegex = /^https?:\/\/(www\.)?google\./i;
+  let currentParams = new URLSearchParams(window.location.search);
+  if (googleSearchRegex.test(referrer)) {
+    // agrega si no existe, o actualiza si ya existe.
+    currentParams.set('utm_source', 'google');
+    currentParams.set('utm_medium', 'seo');
   }
+  const targetLinks = document.querySelectorAll('a[href*="registro.finapartner.com"]');
 
+  targetLinks.forEach(link => {
+    try {
+      // Creamos un objeto URL basado en el href del enlace actual
+      const urlObj = new URL(link.href);
+
+      // Fusionamos los parámetros globales (currentParams) dentro del enlace
+      currentParams.forEach((value, key) => {
+        urlObj.searchParams.set(key, value);
+      });
+
+      // Asignamos la nueva URL construida
+      link.href = urlObj.toString();
+
+    } catch (e) {
+      console.error("Error procesando URL:", link.href, e);
+    }
+  });
+
+
+  // if (queryParams && queryParams.includes("utm_")) {
+  //   document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
+  //     const href = link.getAttribute('href') || '';
+  //     const baseUrl = href.split('?')[0];
+      
+  //     link.setAttribute('href', `${baseUrl}${queryParams}`);
+  //   });
+  // }
+
+  
   document.querySelectorAll('a').forEach(link => {
     link.addEventListener('click', function () {
       if (typeof fbq !== 'undefined') {
