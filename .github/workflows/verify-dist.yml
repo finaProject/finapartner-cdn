@@ -38,31 +38,28 @@ jobs:
 
       - name: Publish dist via SSH
         run: |
-          set -e
-          TARGET_SSH="git@github.com:${TARGET_REPO}.git"
-          # Limpia el directorio si quedó de una ejecución previa
-          rm -rf "${CLONE_DIR}"
-          git clone --depth 1 "${TARGET_SSH}" "${CLONE_DIR}"
-          cd "${CLONE_DIR}"
-          # Asegura la rama destino, sincronizando con remoto si existe
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          if git ls-remote --heads origin "${TARGET_BRANCH}" | grep -q "${TARGET_BRANCH}"; then
-            git fetch origin "${TARGET_BRANCH}"
-            git checkout -B "${TARGET_BRANCH}" "origin/${TARGET_BRANCH}"
-          else
-            # Repo/branch vacío: crea rama nueva
-            git checkout -B "${TARGET_BRANCH}"
-          fi
-          # Configura identidad local para commits del bot
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          # Sincroniza contenidos de dist/ al repo público
-          rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
-          git add -A
-          git -c user.name="github-actions" -c user.email="actions@github.com" commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
-          git push --force-with-lease -u "${TARGET_SSH}" "${TARGET_BRANCH}"
+            set -e
+            TARGET_SSH="git@github.com:${TARGET_REPO}.git"
+            rm -rf "${CLONE_DIR}"
+            git clone --depth 1 "${TARGET_SSH}" "${CLONE_DIR}"
+            cd "${CLONE_DIR}"
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
 
+            # Trae estado real del remoto y coloca HEAD exactamente en origin/<branch>
+            git fetch --prune origin
+            if git ls-remote --heads origin "${TARGET_BRANCH}" | grep -q "${TARGET_BRANCH}"; then
+            git checkout -B "${TARGET_BRANCH}" "origin/${TARGET_BRANCH}"
+            else
+            git checkout -B "${TARGET_BRANCH}"
+            fi
+
+            rsync -a --delete "${GITHUB_WORKSPACE}/dist/" ./
+            git add -A
+            git commit -m "Publish dist from $GITHUB_REPOSITORY@$GITHUB_SHA" || echo "No changes"
+
+            # Empuja al remoto nombrado para que --force-with-lease funcione
+            git push --force-with-lease -u origin "${TARGET_BRANCH}"
       - name: Tag public repo with version
         run: |
           set -e
@@ -73,4 +70,4 @@ jobs:
           fi
           git -c user.name="github-actions" -c user.email="actions@github.com" tag -a "$VERSION" -m "Release $VERSION from $GITHUB_REPOSITORY@$GITHUB_SHA"
           TARGET_SSH="git@github.com:${TARGET_REPO}.git"
-          git push "${TARGET_SSH}" "$VERSION"
+          git push origin "$VERSION"
