@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // RegEx para detectar Google
   const googleSearchRegex = /^https?:\/\/(www\.)?google\./i;
   let currentParams = new URLSearchParams(window.location.search);
-  if (googleSearchRegex.test(referrer)) {
+  const isUtm = [...currentParams.keys()].some(key => key.includes('utm_'));
+  if (googleSearchRegex.test(referrer) && !isUtm) {
     // agrega si no existe, o actualiza si ya existe.
     currentParams.set('utm_source', 'seo');
     currentParams.set('utm_medium', 'seo');
