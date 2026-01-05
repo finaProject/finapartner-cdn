@@ -1,3 +1,19 @@
+// Constantes
+const UTM_SOURCE_SEO = 'seo';
+const UTM_SOURCE = 'utm_source';
+const UTM_MEDIUM = 'utm_medium';
+const COOKIE_KEY = 'current_params_session';
+
+// Helpers cookie de sesión (sin expiración => se borra al cerrar navegador)
+function setSessionCookie(name, value, opts = {}) {
+  const parts = [`${name}=${encodeURIComponent(value)}`, 'path=/', 'samesite=lax'];
+  if (opts.domain) parts.push(`domain=${opts.domain}`);
+  document.cookie = parts.join('; ');
+}
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&') + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : '';
+}
 // Tracking personalizado
 document.addEventListener('DOMContentLoaded', function () {
   let contactSent = false;
@@ -5,44 +21,46 @@ document.addEventListener('DOMContentLoaded', function () {
   let watchVideoSent = false;
   let viewContentSent = false;
   const referrer = document.referrer;
-  // RegEx para detectar Google
   const googleSearchRegex = /^https?:\/\/(www\.)?google\./i;
-  let currentParams = new URLSearchParams(window.location.search);
-  const isUtm = [...currentParams.keys()].some(key => key.includes('utm_'));
-  if (googleSearchRegex.test(referrer) && !isUtm) {
-    // agrega si no existe, o actualiza si ya existe.
-    currentParams.set('utm_source', 'seo');
-    currentParams.set('utm_medium', 'seo');
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const hasUtm = [...urlParams.keys()].some(k => k.startsWith('utm_'));
+  const fromGoogle = googleSearchRegex.test(referrer);
+
+  let currentParams;
+  const cookieStr = getCookie(COOKIE_KEY);
+
+  // Prioridad:
+  // 1) UTM en URL -> usar y guardar
+  // 2) Referrer Google sin UTM -> setear SEO y guardar
+  // 3) Sin UTM y no Google -> cargar cookie si existe
+  // 4) Dejar URL tal cual
+  if (hasUtm) {
+    currentParams = urlParams;
+    setSessionCookie(COOKIE_KEY, currentParams.toString(), { /* domain: '.finapartner.com' */ });
+  } else if (fromGoogle) {
+    currentParams = urlParams;
+    currentParams.set(UTM_SOURCE, UTM_SOURCE_SEO);
+    currentParams.set(UTM_MEDIUM, UTM_SOURCE_SEO);
+    setSessionCookie(COOKIE_KEY, currentParams.toString(), { /* domain: '.finapartner.com' */ });
+  } else if (cookieStr) {
+    currentParams = new URLSearchParams(cookieStr);
+  } else {
+    currentParams = urlParams;
   }
-  const targetLinks = document.querySelectorAll('a[href*="registro.finapartner.com"]');
 
-  targetLinks.forEach(link => {
+  // Propagar a enlaces de registro
+  document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
     try {
-      // Creamos un objeto URL basado en el href del enlace actual
       const urlObj = new URL(link.href);
-
-      // Fusionamos los parámetros globales (currentParams) dentro del enlace
-      currentParams.forEach((value, key) => {
-        urlObj.searchParams.set(key, value);
-      });
-
-      // Asignamos la nueva URL construida
+      currentParams.forEach((value, key) => urlObj.searchParams.set(key, value));
       link.href = urlObj.toString();
-
     } catch (e) {
-      console.error("Error procesando URL:", link.href, e);
+      console.error('Error procesando URL:', link.href, e);
     }
   });
 
-  // if (queryParams && queryParams.includes("utm_")) {
-  //   document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
-  //     const href = link.getAttribute('href') || '';
-  //     const baseUrl = href.split('?')[0];
-      
-  //     link.setAttribute('href', `${baseUrl}${queryParams}`);
-  //   });
-  // }
-
+  
   
   document.querySelectorAll('a').forEach(link => {
     link.addEventListener('click', function () {
@@ -80,3 +98,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 });
+

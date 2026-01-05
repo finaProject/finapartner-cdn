@@ -1,13 +1,13 @@
 {
   "name": "finapartner-cdn",
-  "version": "1.1.14",
+  "version": "1.1.15",
   "description": "scripts cdn",
   "main": "index.js",
   "scripts": {
     "minify": "node scripts/minify-files.js",
     "minify:all": "node scripts/minify-all.js",
     "prepare": "husky install",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node test/test.js"
   },
   "repository": {
     "type": "git",
