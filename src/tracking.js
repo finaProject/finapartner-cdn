@@ -4,7 +4,8 @@ const UTM_SOURCE = 'utm_source';
 const UTM_MEDIUM = 'utm_medium';
 const COOKIE_KEY = 'current_params_session';
 const PREFIX = 'TRACKING';
-// const  log = (...args) => console.// log(`[${PREFIX}]`, ...args);
+const DEBUG = false;
+const log = DEBUG ? (...args) => console.log(`[${PREFIX}]`, ...args) : () => {};
 // Helpers cookie de sesión (sin expiración => se borra al cerrar navegador)
 function setSessionCookie(name, value, opts = {}) {
   const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'SameSite=Lax'];
@@ -40,25 +41,48 @@ function initTracking() {
   const googleSearchRegex = /^https?:\/\/(www\.)?google\./i;
 
   // Cálculo de UTM con prioridades y persistencia temporal en cookie de sesión
-  function computeCurrentParams() {
-    // log('computeCurrentParams');
+ function computeCurrentParams() {
+    // Si ya hay baseline en esta carga (SPA), siempre reusar
+    if (window.__utmBaselineStr && typeof window.__utmBaselineStr === 'string') {
+      return new URLSearchParams(window.__utmBaselineStr);
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const hasUtm = [...urlParams.keys()].some(k => k.startsWith('utm_'));
-    // log('hasUtm', hasUtm);
-    // Regla solicitada:
-    // - Si la URL trae UTM: usarlas y sobreescribir cookie
-    // - Si NO trae UTM: setear seo/seo y sobreescribir cookie
-    let params = new URLSearchParams(urlParams);
-    if (!hasUtm) {
+    const cookieStr = getCookie(COOKIE_KEY);
+    const fromGoogle = /^https?:\/\/(www\.)?google\./i.test(document.referrer);
+
+    // Establece baseline solo una vez por carga de página:
+    // 1) Si URL trae UTM → baseline = URL (y cookie)
+    if (hasUtm) {
+      const s = urlParams.toString();
+      setSessionCookie(COOKIE_KEY, s, getCookieOptsForCurrentHost());
+      window.__utmBaselineStr = s;
+      return new URLSearchParams(s);
+    }
+    // 2) Si viene de Google (sin UTM) → baseline = seo/seo (y cookie)
+    if (fromGoogle) {
+      const params = new URLSearchParams(urlParams);
       params.set(UTM_SOURCE, UTM_SOURCE_SEO);
       params.set(UTM_MEDIUM, UTM_SOURCE_SEO);
+      const s = params.toString();
+      setSessionCookie(COOKIE_KEY, s, getCookieOptsForCurrentHost());
+      window.__utmBaselineStr = s;
+      return new URLSearchParams(s);
     }
-    setSessionCookie(COOKIE_KEY, params.toString(), getCookieOptsForCurrentHost());
-    return params;
+    // 3) Si hay cookie previa (p.ej., cambio de página) → baseline = cookie
+    if (cookieStr) {
+      window.__utmBaselineStr = cookieStr;
+      return new URLSearchParams(cookieStr);
+    }
+    // 4) Sin UTM, sin Google y sin cookie → baseline = URL tal cual (no cookie)
+    const s = urlParams.toString();
+    window.__utmBaselineStr = s;
+    return new URLSearchParams(s);
   }
 
   function applyParamsToLinks(params) {
-    // log('applyParamsToLinks', params.toString());
+    log('applyParamsToLinks', params.toString());
     
     document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
       try {
@@ -68,13 +92,13 @@ function initTracking() {
       } catch (e) {
         console.error('Error procesando URL:', link.href, e);
       }
-      // log('link', link.href);
+      log('link', link.href);
     });
   }
 
   // Aplicar en carga inicial
   let currentParams = computeCurrentParams();
-  // log('currentParams:', currentParams.toString());
+  log('currentParams:', currentParams.toString());
   applyParamsToLinks(currentParams);
 
   // Debounce para re-aplicar después de que el framework termine de renderizar
@@ -82,7 +106,7 @@ function initTracking() {
     if (reapplyTimer) clearTimeout(reapplyTimer);
     reapplyTimer = setTimeout(() => {
       currentParams = computeCurrentParams();
-      // log('reapply (debounced) currentParams:', currentParams.toString());
+        log('reapply (debounced) currentParams:', currentParams.toString());
       applyParamsToLinks(currentParams);
       // Segundo pase tardío por si hay render async
       setTimeout(() => {
