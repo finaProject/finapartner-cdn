@@ -3,62 +3,139 @@ const UTM_SOURCE_SEO = 'seo';
 const UTM_SOURCE = 'utm_source';
 const UTM_MEDIUM = 'utm_medium';
 const COOKIE_KEY = 'current_params_session';
-
+const PREFIX = 'TRACKING';
+// const  log = (...args) => console.// log(`[${PREFIX}]`, ...args);
 // Helpers cookie de sesión (sin expiración => se borra al cerrar navegador)
 function setSessionCookie(name, value, opts = {}) {
-  const parts = [`${name}=${encodeURIComponent(value)}`, 'path=/', 'samesite=lax'];
-  if (opts.domain) parts.push(`domain=${opts.domain}`);
+  const parts = [`${name}=${encodeURIComponent(value)}`, 'Path=/', 'SameSite=Lax'];
+  // Compartir entre subdominios SOLO si estás bajo *.finapartner.com:
+  if (opts.domain) parts.push(`Domain=${opts.domain}`);
+  if (location.protocol === 'https:') parts.push('Secure');
   document.cookie = parts.join('; ');
 }
 function getCookie(name) {
   const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&') + '=([^;]*)'));
   return m ? decodeURIComponent(m[1]) : '';
 }
+
+// Determina opciones de cookie según dominio actual:
+// - En producción bajo *.finapartner.com usa Domain=.finapartner.com para compartir entre subdominios
+// - En local/otros hosts no fija Domain para permitir sobreescritura correcta
+function getCookieOptsForCurrentHost() {
+  const host = location.hostname || '';
+  const opts = {};
+  if (host === 'finapartner.com' || host.endsWith('.finapartner.com')) {
+    opts.domain = '.finapartner.com';
+  }
+  return opts;
+}
+
 // Tracking personalizado
-document.addEventListener('DOMContentLoaded', function () {
+function initTracking() {
   let contactSent = false;
   let initiateCheckoutSent = false;
   let watchVideoSent = false;
   let viewContentSent = false;
-  const referrer = document.referrer;
+  let reapplyTimer = null;
   const googleSearchRegex = /^https?:\/\/(www\.)?google\./i;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const hasUtm = [...urlParams.keys()].some(k => k.startsWith('utm_'));
-  const fromGoogle = googleSearchRegex.test(referrer);
-
-  let currentParams;
-  const cookieStr = getCookie(COOKIE_KEY);
-
-  // Prioridad:
-  // 1) UTM en URL -> usar y guardar
-  // 2) Referrer Google sin UTM -> setear SEO y guardar
-  // 3) Sin UTM y no Google -> cargar cookie si existe
-  // 4) Dejar URL tal cual
-  if (hasUtm) {
-    currentParams = urlParams;
-    setSessionCookie(COOKIE_KEY, currentParams.toString(), { /* domain: '.finapartner.com' */ });
-  } else if (fromGoogle) {
-    currentParams = urlParams;
-    currentParams.set(UTM_SOURCE, UTM_SOURCE_SEO);
-    currentParams.set(UTM_MEDIUM, UTM_SOURCE_SEO);
-    setSessionCookie(COOKIE_KEY, currentParams.toString(), { /* domain: '.finapartner.com' */ });
-  } else if (cookieStr) {
-    currentParams = new URLSearchParams(cookieStr);
-  } else {
-    currentParams = urlParams;
+  // Cálculo de UTM con prioridades y persistencia temporal en cookie de sesión
+  function computeCurrentParams() {
+    // log('computeCurrentParams');
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasUtm = [...urlParams.keys()].some(k => k.startsWith('utm_'));
+    // log('hasUtm', hasUtm);
+    // Regla solicitada:
+    // - Si la URL trae UTM: usarlas y sobreescribir cookie
+    // - Si NO trae UTM: setear seo/seo y sobreescribir cookie
+    let params = new URLSearchParams(urlParams);
+    if (!hasUtm) {
+      params.set(UTM_SOURCE, UTM_SOURCE_SEO);
+      params.set(UTM_MEDIUM, UTM_SOURCE_SEO);
+    }
+    setSessionCookie(COOKIE_KEY, params.toString(), getCookieOptsForCurrentHost());
+    return params;
   }
 
-  // Propagar a enlaces de registro
-  document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
-    try {
-      const urlObj = new URL(link.href);
-      currentParams.forEach((value, key) => urlObj.searchParams.set(key, value));
-      link.href = urlObj.toString();
-    } catch (e) {
-      console.error('Error procesando URL:', link.href, e);
-    }
+  function applyParamsToLinks(params) {
+    // log('applyParamsToLinks', params.toString());
+    
+    document.querySelectorAll('a[href*="registro.finapartner.com"]').forEach(link => {
+      try {
+        const urlObj = new URL(link.href);
+        params.forEach((value, key) => urlObj.searchParams.set(key, value));
+        link.href = urlObj.toString();
+      } catch (e) {
+        console.error('Error procesando URL:', link.href, e);
+      }
+      // log('link', link.href);
+    });
+  }
+
+  // Aplicar en carga inicial
+  let currentParams = computeCurrentParams();
+  // log('currentParams:', currentParams.toString());
+  applyParamsToLinks(currentParams);
+
+  // Debounce para re-aplicar después de que el framework termine de renderizar
+  function scheduleReapply() {
+    if (reapplyTimer) clearTimeout(reapplyTimer);
+    reapplyTimer = setTimeout(() => {
+      currentParams = computeCurrentParams();
+      // log('reapply (debounced) currentParams:', currentParams.toString());
+      applyParamsToLinks(currentParams);
+      // Segundo pase tardío por si hay render async
+      setTimeout(() => {
+        const lateParams = computeCurrentParams();
+        applyParamsToLinks(lateParams);
+      }, 150);
+    }, 50);
+  }
+
+  // Detectar navegación interna (SPA): pushState/replaceState/popstate/hashchange
+  (function installLocationChangeHook() {
+    if (window.__trackingSpaHookInstalled) return;
+    window.__trackingSpaHookInstalled = true;
+    const origPushState = history.pushState;
+    const origReplaceState = history.replaceState;
+    history.pushState = function () {
+      const ret = origPushState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+      return ret;
+    };
+    history.replaceState = function () {
+      const ret = origReplaceState.apply(this, arguments);
+      window.dispatchEvent(new Event('locationchange'));
+      return ret;
+    };
+    window.addEventListener('popstate', function () {
+      window.dispatchEvent(new Event('locationchange'));
+    });
+    window.addEventListener('hashchange', function () {
+      window.dispatchEvent(new Event('locationchange'));
+    });
+  })();
+
+  // Re-aplicar UTM cuando cambie la URL dentro de la misma sesión/página
+  window.addEventListener('locationchange', function () {
+    scheduleReapply();
   });
+
+  // Observar inserciones de nodos (enlaces renderizados dinámicamente)
+  try {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.addedNodes && m.addedNodes.length > 0) {
+          scheduleReapply();
+          break;
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  } catch (e) {
+    // Si MutationObserver no está disponible, ignorar silenciosamente
+  }
+
 
   
   
@@ -97,5 +174,12 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
   });
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTracking, { once: true });
+} else {
+  // Si el script se carga tras DOMContentLoaded, ejecuta inmediatamente
+  initTracking();
+}
 
